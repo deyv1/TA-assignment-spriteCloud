@@ -1,0 +1,664 @@
+{
+  "info": {
+    "_postman_id": "771535b0-dc55-4db0-a7bf-9dfa449e04a3",
+    "name": "DummyJSON",
+    "description": "# DummyJSON API Test Collection\n\n## Overview\nThis collection covers automated API testing against the [DummyJSON](https://dummyjson.com/) REST API — a free fake JSON API for prototyping and testing.\n\n**Base URL:** `https://dummyjson.com/`\n\n## Test Cases\n\n| # | Folder | Description |\n|---|--------|-------------|\n| 1 | 1-Successful login | Fetches available users, then authenticates to obtain a JWT access token |\n| 2 | 2-Get Product and validate its content | Retrieves the full product list, picks a product, and validates its response schema |\n| 3 | 3-For user, create a cart and validate | Creates a cart for the authenticated user with 3 products and validates the response |\n| 4 | 4-Delete operation | Performs a DELETE request on a product and confirms deletion |\n| 5 | 5-Negative scenarios | Validates error handling for an invalid category method and an invalid date format |\n\n## Collection Variables\n\n| Variable | Description |\n|----------|-------------|\n| `usersExist` | Flag set to `true` when users are found; used to conditionally skip the login step |\n| `userName` | Username extracted from the users list for authentication |\n| `userPassword` | Password extracted from the users list for authentication |\n| `userId` | ID of the user used to create the cart |\n| `productId` | ID of a product used in single-product and delete requests |\n| `existingIds` | JSON array of 3 product IDs used to build the cart |\n| `listProducts` | JSON array of product objects (id + random quantity) sent in the cart creation body |\n| `productSchema` | JSON Schema used to validate the structure of a single product response |\n| `token` | JWT access token returned after a successful login |\n\n## Execution Order\nFolders and requests are numbered and **must be run in order** (top to bottom). Each folder depends on variables set by the previous one:\n- Folder 1 sets `userName`, `userPassword`, `userId`, and `token`\n- Folder 2 sets `productId` and `existingIds`\n- Folder 3 uses `userId`, `existingIds`, and `listProducts`\n- Folder 4 uses `productId`\n- Folder 5 is independent and can be run standalone\n\n> Run the full collection using the **Collection Runner** to execute all test cases in sequence.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "29988778"
+  },
+  "item": [
+    {
+      "name": "1-Successful login",
+      "item": [
+        {
+          "name": "Get Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nvar jsonData = pm.response.json();\r\npm.collectionVariables.set('usersExist', true);\r\n\r\npm.test(\"There are users to authenticate\", function () {\r\n    pm.expect(jsonData.users.length).gt(0);\r\n})\r\n\r\nconst user = jsonData.users.find(usr => usr.username.length > 0 && usr.password.length > 0);\r\n\r\npm.test(\"A user with valid credentials was found\", function () {\r\n    pm.expect(user, \"No user with username+password found\").to.not.be.undefined;\r\n});\r\n\r\nif (user != undefined) {\r\n    pm.collectionVariables.set('userName', user.username);\r\n    pm.collectionVariables.set('userPassword', user.password);\r\n    pm.collectionVariables.set('userId', user.id);\r\n}\r\nelse\r\n    pm.collectionVariables.set('usersExist', false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "## GET /users\n\nRetrieves the full list of users from DummyJSON.\n\n**Purpose:** Find a user with valid credentials to use in the login step.\n\n### What this request does\n- Sends `GET https://dummyjson.com/users`\n- Finds the first user with a non-empty `username` and `password`\n- Stores their credentials and ID in collection variables\n\n### Test Assertions\n- Status code is `200 OK`\n- The `users` array contains at least one entry\n\n### Variables Set\n| Variable | Value |\n|----------|-------|\n| `usersExist` | `true` if a valid user is found, `false` otherwise |\n| `userName` | Username of the selected user |\n| `userPassword` | Password of the selected user |\n| `userId` | ID of the selected user |"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Token for User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nvar jsonData = pm.response.json();\r\n\r\npm.test(\"Access token is returned\", function () {\r\n    pm.expect(jsonData.accessToken).to.not.be.null;\r\n});\r\n\r\npm.collectionVariables.set('token', jsonData.accessToken);"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"usersExist\")) {\r\n    pm.test.skip('Token test skipped due to missing user and password');\r\n    pm.execution.skipRequest();\r\n}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "credentials",
+                "value": "include"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"username\": \"{{userName}}\",\r\n    \"password\": \"{{userPassword}}\",\r\n    \"expiresInMins\": 30\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "## POST /auth/login\n\nAuthenticates a user and retrieves a JWT access token.\n\n**Purpose:** Perform a successful login using credentials obtained from the previous request.\n\n### Request Body\n```json\n{\n  \"username\": \"{{userName}}\",\n  \"password\": \"{{userPassword}}\",\n  \"expiresInMins\": 30\n}\n```\n\n### Pre-request Logic\n- If `usersExist` is `false`, the request is **skipped** to avoid a false failure.\n\n### Test Assertions\n- Status code is `200 OK`\n- `accessToken` is present and not null in the response\n\n### Variables Set\n| Variable | Value |\n|----------|-------|\n| `token` | JWT access token from the response |"
+          },
+          "response": []
+        }
+      ],
+      "description": "## Successful Login\n\nThis folder implements **Test Case 1**: perform a successful login against the DummyJSON Auth API.\n\n### Flow\n1. **1-users** — Sends a `GET /users` request to retrieve all available users. Picks the first user with a valid `username` and `password`, then stores them in collection variables (`userName`, `userPassword`, `userId`). Sets `usersExist = true` if a valid user is found.\n2. **2-tokens** — Sends a `POST /auth/login` request using the credentials from step 1. On success, stores the returned `accessToken` in the `token` collection variable.\n\n### Pre-conditions\n- The DummyJSON `/users` endpoint must return at least one user with non-empty credentials.\n\n### Variables Set\n| Variable | Set By | Value |\n|----------|--------|-------|\n| `usersExist` | 1-users | `true` if a valid user exists |\n| `userName` | 1-users | Username of the selected user |\n| `userPassword` | 1-users | Password of the selected user |\n| `userId` | 1-users | ID of the selected user |\n| `token` | 2-tokens | JWT access token from login response |"
+    },
+    {
+      "name": "2-Get Product and validate its content",
+      "item": [
+        {
+          "name": "Get all Products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst { products } = pm.response.json();\r\n\r\npm.test(\"Products list is not empty\", function () {\r\n    pm.expect(products).to.be.an(\"array\").that.is.not.empty;\r\n});\r\n\r\npm.collectionVariables.unset('productId');\r\npm.collectionVariables.unset('existingIds');\r\n\r\nif (products.length > 0) {\r\n    const product = products.find(pr => pr.id != undefined && pr.id > 0);\r\n\r\n    pm.test(\"At least one product has a valid ID\", () => {\r\n        pm.expect(product, \"No product with a valid ID found\").to.exist;\r\n    });\r\n\r\n    if (product) {\r\n        pm.collectionVariables.set('productId', product.id);\r\n        pm.collectionVariables.set('existingIds', JSON.stringify(products.slice(0, 3).map(p => p.id)));\r\n    }\r\n}\r\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "## GET /products\n\nRetrieves the full list of products from DummyJSON.\n\n**Purpose:** Identify a valid product ID and collect 3 product IDs for cart creation.\n\n### Test Assertions\n- Status code is `200 OK`\n\n### Variables Set\n| Variable | Value |\n|----------|-------|\n| `productId` | ID of the first product with a valid `id > 0` |\n| `existingIds` | JSON array of the first 3 product IDs (used for cart creation) |"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a single Product and validate schema",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "const expectedSchema = pm.environment.get(\"productSchema\");",
+                  "",
+                  "pm.test('Expected product Schema is defined', function (){",
+                  "    pm.expect(expectedSchema, \"Expected product schema is not defined\").to.not.be.undefined;",
+                  "})",
+                  "",
+                  "if (expectedSchema) {",
+                  "    const schema = JSON.parse(expectedSchema);",
+                  "",
+                  "    pm.test(\"Response matches product Schema\", function () {",
+                  "        pm.response.to.have.jsonSchema(schema);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.test('There is at least one product', function () {\r",
+                  "    pm.expect(pm.collectionVariables.get('productId'), 'There is a product with id').to.not.be.undefined;\r",
+                  "});\r",
+                  "\r",
+                  "if (pm.collectionVariables.get('productId') === undefined) {\r",
+                  "    pm.test.skip('There is no product to see the details');\r",
+                  "    pm.execution.skipRequest();\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "## GET /products/:id\n\nRetrieves a single product by ID and validates its response structure.\n\n**Purpose:** Confirm that the product endpoint returns a well-formed response matching the expected JSON Schema.\n\n### URL\n`GET https://dummyjson.com/products/{{productId}}`\n\n### Test Assertions\n- Status code is `200 OK`\n- Response body matches the JSON Schema stored in the `productSchema` collection variable\n\n### Pre-conditions\n- `productId` must be set (by the \"all products\" request)\n- `productSchema` must be set as a collection variable containing a valid JSON Schema string"
+          },
+          "response": []
+        }
+      ],
+      "description": "## Get Product and Validate Its Content\n\nThis folder implements **Test Case 2**: retrieve a product and validate its content and schema.\n\n### Flow\n1. **all products** — Sends a `GET /products` request to retrieve all products. Picks the first valid product and stores its `id` in `productId`. Also stores the first 3 product IDs as a JSON array in `existingIds` (used later for cart creation).\n2. **get a single product and validate schema** — Sends a `GET /products/{{productId}}` request and validates the response body against a predefined JSON Schema stored in the `productSchema` collection variable.\n\n### Pre-conditions\n- The `productSchema` collection variable must contain a valid JSON Schema string.\n\n### Variables Set\n| Variable | Set By | Value |\n|----------|--------|-------|\n| `productId` | all products | ID of the first valid product |\n| `existingIds` | all products | JSON array of the first 3 product IDs |"
+    },
+    {
+      "name": "3-For user, create a cart and validate",
+      "item": [
+        {
+          "name": "Create cart with 3 products",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const existingIdsRaw = pm.collectionVariables.get('existingIds');\r\n\r\nif (!existingIdsRaw) {\r\n    pm.test('There are products to add to Cart', function () {\r\n        throw new Error('There are no products to add to Cart. Tests for creating a cart of Products did not run!');\r\n    });\r\n    pm.execution.skipRequest();\r\n} else {\r\n    pm.test('There are products to add to Cart', function () {\r\n        pm.expect(existingIdsRaw, 'There should be item ids to add to Cart').to.not.be.undefined;\r\n    });\r\n\r\n    const ids = JSON.parse(existingIdsRaw);\r\n    const products = ids.map(id => ({\r\n        id,\r\n        quantity: Number(pm.variables.replaceIn('{{$randomInt}}'))\r\n    }));\r\n\r\n    pm.collectionVariables.set('listProducts', JSON.stringify(products));\r\n}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response is successful\", function () {\n    pm.response.to.have.status(201);\n});\n\npm.test(\"Response has valid format\", function () {\n    pm.response.to.be.json;\n});\n\nvar { products } = pm.response.json();\n\nconst ids = JSON.parse(pm.collectionVariables.get('existingIds'));\n\npm.test(`${ids.length} products have been added`, function () {\n    pm.expect(products.length).to.eql(ids.length);\n});\n\npm.test('Response contains expected values', function () {\n    products.forEach(product => {\n        pm.expect(product, 'Product should have id').to.have.property('id');\n        pm.expect(product,'Product should have quantity').to.have.property('quantity');\n    });\n});\n\npm.test(\"All items have been added\", function () {\n    const addedProducts = JSON.parse(pm.collectionVariables.get('listProducts'));\n\n    addedProducts.forEach((item) => {\n        const match = products.find(p => p.id === item.id);\n        pm.expect(match).to.include(item);\n    });\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"userId\": {{userId}},\r\n    \"products\": {{listProducts}}\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/carts/add",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carts",
+                "add"
+              ]
+            },
+            "description": "## POST /carts/add\n\nCreates a new cart for the authenticated user containing 3 products.\n\n**Purpose:** Validate that a cart can be created with multiple products for a specific user.\n\n### Request Body\n```json\n{\n  \"userId\": {{userId}},\n  \"products\": {{listProducts}}\n}\n```\n`listProducts` is a JSON array of `{ \"id\": <productId>, \"quantity\": <randomInt> }` objects, built dynamically in the pre-request script.\n\n### Pre-request Logic\n- Reads `existingIds` (3 product IDs set in folder 2)\n- Maps each ID to an object with a random quantity using `{{$randomInt}}`\n- Stores the result in `listProducts`\n\n### Test Assertions\n- Status code is `201 Created`\n- The `products` array in the response contains exactly 3 items\n\n### Pre-conditions\n- `userId` must be set (from folder 1)\n- `existingIds` must contain exactly 3 product IDs (from folder 2)"
+          },
+          "response": []
+        }
+      ],
+      "description": "## Create a Cart and Validate\n\nThis folder implements **Test Case 3**: create a cart for the authenticated user containing 3 products, and validate the response.\n\n### Flow\n1. **Create cart** — Sends a `POST /carts/add` request with the `userId` from folder 1 and a list of 3 products built from `existingIds` (set in folder 2). Each product is assigned a random quantity via `{{$randomInt}}`. The pre-request script constructs the `listProducts` variable before the request is sent.\n\n### Pre-conditions\n- `userId` must be set (from folder 1).\n- `existingIds` must be set (from folder 2) and contain exactly 3 product IDs.\n\n### Validations\n- Response status is `201 Created`.\n- The `products` array in the response contains exactly 3 items (matching the number of IDs in `existingIds`).\n\n### Variables Set\n| Variable | Set By | Value |\n|----------|--------|-------|\n| `listProducts` | Pre-request script | JSON array of `{ id, quantity }` objects |"
+    },
+    {
+      "name": "4-Delete operation",
+      "item": [
+        {
+          "name": "Delete a Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nvar jsonData = pm.response.json();\r\n\r\npm.test(\"Product is deleted\", function () { \r\n    pm.expect(jsonData.isDeleted).to.be.true;\r\n})"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('productId')) {",
+                  "    pm.test.skip('Delete skipped — no productId available');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "## DELETE /products/:id\n\nDeletes a product by ID.\n\n**Purpose:** Validate that the DELETE operation returns a successful response confirming the product was deleted.\n\n### URL\n`DELETE https://dummyjson.com/products/{{productId}}`\n\n### Test Assertions\n- Status code is `200 OK`\n- Response body contains `isDeleted: true`\n\n### Pre-conditions\n- `productId` must be set (from folder 2)\n\n> **Note:** DummyJSON simulates deletion — the product is not actually removed from the database. The API returns a mock deletion response."
+          },
+          "response": []
+        }
+      ],
+      "description": "## Delete Operation\n\nThis folder implements **Test Case 4**: perform a DELETE operation on a product and confirm it was deleted.\n\n### Flow\n1. **delete a product** — Sends a `DELETE /products/{{productId}}` request using the product ID set in folder 2.\n\n### Pre-conditions\n- `productId` must be set (from folder 2).\n\n### Validations\n- Response status is `200 OK`.\n- The response body contains `isDeleted: true`.\n\n> **Note:** DummyJSON simulates deletion — the product is not actually removed from the database, but the API returns a response as if it were."
+    },
+    {
+      "name": "5-Negative scenarios",
+      "item": [
+        {
+          "name": "Product Categories",
+          "item": [
+            {
+              "name": "Category does not exist",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "let jsonData = pm.response.json();",
+                      "",
+                      "pm.test(\"No products are returned for non-existent category\", function () {",
+                      "    pm.expect(jsonData.products.length).to.equal(0);",
+                      "});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.variables.set(\"category\", pm.variables.replaceIn('{{$randomLoremWord}}'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products/category/{{category}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "category",
+                    "{{category}}"
+                  ]
+                },
+                "description": "## GET /products/category/:category (non-existent category)\n\n**Negative Scenario:** Sends a GET request using a randomly generated lorem word as the category slug.\n\n### Purpose\nVerify that the API returns a `200 OK` with an empty product list when the category does not exist.\n\n### Pre-request Logic\n- Generates a random lorem word and stores it in the `category` variable.\n\n### Expected Behavior\n- Status code: `200 OK`\n- `products` array is empty"
+              },
+              "response": []
+            },
+            {
+              "name": "Category is numeric",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nlet jsonData = pm.response.json();\n\npm.test(\"Response has correct structure\", function () {\n    pm.expect(jsonData).to.have.property(\"products\").that.is.an(\"array\");\n    pm.expect(jsonData).to.have.property(\"total\").that.is.a(\"number\");\n    pm.expect(jsonData).to.have.property(\"skip\").that.is.a(\"number\");\n    pm.expect(jsonData).to.have.property(\"limit\").that.is.a(\"number\");\n});\n\npm.test(\"Product list is empty\", function () {\n    pm.expect(jsonData.products).to.have.lengthOf(0);\n});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products/category/10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "category",
+                    "10"
+                  ]
+                },
+                "description": "## GET /products/category/10 (numeric category slug)\n\n**Negative Scenario:** Sends a GET request using a number (`10`) as the category slug.\n\n### Purpose\nVerify that the API returns a `200 OK` with an empty product list when the category slug is a number (no category named \"10\" exists).\n\n### Expected Behavior\n- Status code: `200 OK`\n- Response has the standard paginated structure (`products`, `total`, `skip`, `limit`)\n- `products` array is empty"
+              },
+              "response": []
+            },
+            {
+              "name": "Category is empty",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\nlet jsonData = pm.response.json();\r\n\r\npm.test(\"Response contains expected error message\", function () {\r\n    pm.expect(jsonData.message).to.eql(\"Product with id 'category' not found\");\r\n});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products/category/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "category",
+                    ""
+                  ]
+                },
+                "description": "## GET /products/category/ (empty category slug)\n\n**Negative Scenario:** Sends a GET request with an empty category slug in the URL path.\n\n### Purpose\nVerify that the API returns a `404` error when no category name is provided.\n\n### Expected Behavior\n- Status code: `404`\n- Response body contains: `Product with id 'category' not found`"
+              },
+              "response": []
+            },
+            {
+              "name": "Category wrong Method",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\npm.test(\"Response contains expected error message\", function () {\r\n    const expression = new RegExp(`error[\\\\s\\\\S]*Cannot POST /products/category/${pm.variables.get('category')}`, \"i\");\r\n    pm.expect(pm.response.text()).to.match(expression);\r\n});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.variables.set(\"category\", pm.variables.replaceIn('{{$randomLoremWord}}'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products/category/{{category}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "category",
+                    "{{category}}"
+                  ]
+                },
+                "description": "## POST /products/category/:category (wrong HTTP method)\n\n**Negative Scenario:** Sends a POST request to an endpoint that only supports GET.\n\n### Purpose\nVerify that the API returns a `404` error when an unsupported HTTP method is used on the category endpoint.\n\n### Pre-request Logic\n- Generates a random lorem word and stores it in the `category` variable.\n\n### Expected Behavior\n- Status code: `404`\n- Response body contains an error matching `Cannot POST /products/category/<category>`"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Filter products",
+          "item": [
+            {
+              "name": "date in the future",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nvar jsonData = pm.response.json();\n\npm.test(\"Response does not contains products\", function () {\n    pm.expect(jsonData.products.length).to.eq(0);\n    pm.expect(jsonData.total).to.eq(0);\n    pm.expect(jsonData.skip).to.eq(0);\n    pm.expect(jsonData.limit).to.eq(0);\n});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/products?modifiedAfter={{$randomDateFuture}}&select=rating,meta",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products"
+                  ],
+                  "query": [
+                    {
+                      "key": "modifiedAfter",
+                      "value": "{{$randomDateFuture}}"
+                    },
+                    {
+                      "key": "select",
+                      "value": "rating,meta"
+                    }
+                  ]
+                },
+                "description": "## GET /products?modifiedAfter={{$randomDateFuture}}\n\n**Negative Scenario:** Filters products by a `modifiedAfter` date set in the future.\n\n### Purpose\nVerify that the API returns an empty product list when no products have been modified after a future date.\n\n### Query Parameters\n| Parameter | Value |\n|-----------|-------|\n| `modifiedAfter` | `{{$randomDateFuture}}` — a dynamically generated future date |\n| `select` | `rating,meta` |\n\n### Expected Behavior\n- Status code: `200 OK`\n- `products` array is empty\n- `total`, `skip`, and `limit` are all `0`\n\n### Why this is a negative test\nNo products should exist with a modification date in the future. This validates that the filter works correctly and returns an empty result set rather than all products or an error."
+              },
+              "response": []
+            },
+            {
+              "name": "Invalid date format",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const moment = require('moment');\r\n\r\npm.variables.set(\"modifiedAt\", moment(pm.variables.replaceIn('{{$randomDatePast}}')).format(\"DD/YYYY hh:mm:ss\"));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status code is 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\nvar jsonData = pm.response.json();\r\n\r\npm.test(\"Date is invalid format\", function () { \r\n    pm.expect(jsonData.message).contain('Invalid \\'modifiedAfter\\' - should be a valid ISO 8601 date');\r\n});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/products?modifiedAfter={{modifiedAt}}&select=rating,meta",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products"
+                  ],
+                  "query": [
+                    {
+                      "key": "modifiedAfter",
+                      "value": "{{modifiedAt}}"
+                    },
+                    {
+                      "key": "select",
+                      "value": "rating,meta"
+                    }
+                  ]
+                },
+                "description": "## GET /products?modifiedAfter={{modifiedAt}} (invalid format)\n\n**Negative Scenario:** Filters products using a `modifiedAfter` date in an invalid format.\n\n### Purpose\nVerify that the API returns a `400 Bad Request` error when the `modifiedAfter` parameter is not in ISO 8601 format.\n\n### Pre-request Logic\n- Uses `moment.js` to generate a past date formatted as `DD/YYYY hh:mm:ss` — an intentionally invalid format\n- Stores the result in the `modifiedAt` environment variable\n\n### Query Parameters\n| Parameter | Value |\n|-----------|-------|\n| `modifiedAfter` | `{{modifiedAt}}` — a past date in `DD/YYYY hh:mm:ss` format |\n| `select` | `rating,meta` |\n\n### Expected Behavior\n- Status code: `400 Bad Request`\n- Response body contains: `Invalid 'modifiedAfter' - should be a valid ISO 8601 date`\n\n### Why this is a negative test\nThe API requires dates in ISO 8601 format. Passing a non-standard format should be rejected with a clear validation error."
+              },
+              "response": []
+            }
+          ]
+        }
+      ],
+      "description": "## Negative Scenarios\n\nThis folder implements **Test Case 5**: validate that the API handles invalid or unexpected inputs gracefully.\n\nTwo sub-folders cover different API endpoints:\n\n### Product Categories (sub-folder)\nTests targeting the `/products/category/:category` endpoint:\n- **negative scenario search** — Sends a `GET /products/category/pets` request with a body (invalid for GET). Expects a `404` response with an error message indicating the method is not allowed.\n- **Category is numeric** — Tests behavior when a numeric value is passed as the category.\n- **Category is empty** — Tests behavior when an empty string is passed as the category.\n- **Category wrong Method** — Tests using an incorrect HTTP method on the category endpoint.\n- **Category does not exist** — Tests a category name that does not exist in the system.\n\n### Filter Products (sub-folder)\nTests targeting the `/products?modifiedAfter=` filter:\n- **date in the future** — Passes a future date as `modifiedAfter`. Expects a `200` response with an empty products array (`total: 0`), since no products were modified after a future date.\n- **Invalid date format** — Passes a date in an invalid format (`DD/YYYY hh:mm:ss` instead of ISO 8601). Expects a `400` response with the message: `Invalid 'modifiedAfter' - should be a valid ISO 8601 date`.\n\n### Pre-conditions\n- These scenarios are independent and do not require variables from earlier folders."
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "usersExist",
+      "value": ""
+    },
+    {
+      "key": "userName",
+      "value": ""
+    },
+    {
+      "key": "userPassword",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "listProducts",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "baseUrl",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": ""
+    },
+    {
+      "key": "existingIds",
+      "value": ""
+    }
+  ]
+}

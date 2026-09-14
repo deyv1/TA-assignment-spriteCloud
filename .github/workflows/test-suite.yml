@@ -1,0 +1,61 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  ui-tests:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./UI
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+      - name: Run Playwright tests
+        run: npx playwright test
+        env:
+          BASE_URL_UI: ${{ vars.BASE_URL_UI }}
+          STANDARD_PASSWORD: ${{ secrets.STANDARD_PASSWORD }}
+          LOCKED_OUT_PASSWORD: ${{ secrets.LOCKED_OUT_PASSWORD }}
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: UI/playwright-report/
+          retention-days: 30
+
+  api-tests:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./API
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+      - name: Run Postman collection with Newman
+        run: >
+          npx --package newman --package newman-reporter-htmlextra newman run collections/DummyJSON.postman_collection.json
+          --env-var "baseUrl=${{ vars.BASE_URL_API }}"
+          --env-var "productSchema=$(node -e "console.log(JSON.stringify(require('./fixtures/DummyJSON_products.schema.json')))")"
+          --reporters cli,htmlextra
+          --reporter-htmlextra-export newman-report/report.html
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: newman-report
+          path: API/newman-report/
+          retention-days: 30
